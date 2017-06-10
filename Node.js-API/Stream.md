@@ -50,6 +50,250 @@ const stream = require('stream');
 
 ## API for Stream Consumers
 
+不论一个Node.js应用程序多么简单，几乎都会用到流，下面是在Node.js中实现Http server的简单应用：
+
+``` js
+const http = require('http');
+
+const server = http.createServer( (req, res) => {
+  // req is an http.IncomingMessage, which is a Readable Stream
+  // res is an http.ServerResponse, which is a Writable Stream
+
+  let body = '';
+  // Get the data as utf8 strings.
+  // If an encoding is not set, Buffer objects will be received.
+  req.setEncoding('utf8');
+
+  // Readable streams emit 'data' events once a listener is added
+  req.on('data', (chunk) => {
+    body += chunk;
+  });
+
+  // the end event indicates that the entire body has been received
+  req.on('end', () => {
+    try {
+      const data = JSON.parse(body);
+      // write back something interesting to the user:
+      res.write(typeof data);
+      res.end();
+    } catch (er) {
+      // uh oh!  bad json!
+      res.statusCode = 400;
+      return res.end(`error: ${er.message}`);
+    }
+  });
+});
+
+server.listen(1337);
+
+// $ curl localhost:1337 -d '{}'
+// object
+// $ curl localhost:1337 -d '"foo"'
+// string
+// $ curl localhost:1337 -d 'not json'
+// error: Unexpected token o
+```
+
+[Writable]()流（比如在例子中的`res`）暴露方法向流写数据，比如`write()`和`end()`。
+
+[Writable]()流使用`EventEmitter`API来通知应用程序的代码，存在可用的数据可以从流中读取，读取数据的方式可以有多种。
+
+[Writable]()和[Readable]()流都使用`EventEmitter`来通知流内部当前状态的变化。
+
+[Duplex]()和[Transform]()流既是[Writable]()又是[Readable]()。
+
+应用程序开发者可以轻易的从流中读取数据或写入数据，而不需要去实现一个流，因此也就不需要调用`require 'stream'`。
+
+想要实现一个新的流的开发者可以参考[API for Stream Implementer](#api-for-stream-implementer)。
+
+### Writable Streams
+
+可写的流其实是一个目的地的抽象，数据可以写入这个目的地。所以可以理解为可写流就是一个可以写入数据的地方。
+
+[Writable]()流有如下几个例子：
+* HTTP requests, on the client
+* HTTP responses, on the server
+* fs write streams
+* zlib streams
+* crypto streams
+* TCP sockets
+* child process stdin
+* process.stdout, process.stderr
+
+注意：以上例子中有的流其实是`Duplex`流，但是实现了[Writable]()接口。
+
+所有实现[Writable]()的接口都在`stream.Writable` class中定义。
+
+实现Writable接口的类在细节上可以有不同，但是都遵循一些基础的模型如下所示：
+
+```js
+const myStream = getWritableStreamSomehow();
+myStream.write('some data');
+myStream.write('some more data');
+myStream.end('done writing data');
+```
+
+#### Class: stream.Writable
+
+##### Event: 'close'
+
+当底层资源被关闭的时候会产生一个`close`事件（比如文件描述符关闭的时候）。这意味着之后没有任何事件产生，也不会有任何的计算发生。
+
+并非所有的Writable流都会产生`close`事件。
+
+##### Event: 'drain'
+
+如果调用[stream.write(chunk)]()返回`false`，当重新可以向流中写入数据时，会产生`drain`事件。
+
+```js
+// Write the data to the supplied writable stream one million times.
+// Be attentive to back-pressure.
+function writeOneMillionTimes(writer, data, encoding, callback) {
+  let i = 1000000;
+  write();
+  function write() {
+    var ok = true;
+    do {
+      i--;
+      if (i === 0) {
+        // last time!
+        writer.write(data, encoding, callback);
+      } else {
+        // see if we should continue, or wait
+        // don't pass the callback, because we're not done yet.
+        ok = writer.write(data, encoding);
+      }
+    } while (i > 0 && ok);
+    if (i > 0) {
+      // had to stop early!
+      // write some more once it drains
+      writer.once('drain', write);
+    }
+  }
+}
+```
+
+##### Event: 'error'
+
+* &lt;Error&gt;
+
+当写入数据或pipe数据失败时，会产生`error`事件，监听者的回调函数会被传入一个`Error`参数。
+
+注意： 当`error`事件产生时，流并不会被关闭。
+
+##### Event: 'finish'
+
+当调用`stream.end()`后，会产生`finish`，并且所有的数据会被flush到底层系统。
+
+```js
+const writer = getWritableStreamSomehow();
+for (var i = 0; i < 100; i ++) {
+  writer.write(`hello, #${i}!\n`);
+}
+writer.end('This is the end\n');
+writer.on('finish', () => {
+  console.error('All writes are now complete.');
+});
+```
+
+##### Event: 'pipe'
+
+* src [&lt;stream.Readable&gt;]() 正在pipe到当前writable流的源stream
+
+当`stream.pipe()`被调用在一个可读的流上，把当前可写的流作为他写入的目的地时，会产生一个pipe事件。
+
+##### writable.cork()
+
+`writable.cork()`方法会强制使得所有已经写入stream的数据被缓存在内存中，直到调用`writable.uncork()`或者`writable.end()`缓存数据才会被flush。
+
+`writable.cork()`的主要意图是避免写入太多小的数据包到流中，可能不会引起在内部buffer中备份，这样就会产生性能上的影响。在这种情况下，对`writable._writev()`的实现会执行缓存来优化性能。
+
+译者注：这里不是非常确定是这样理解的。
+
+##### writable.end([chunk][, encoding][, callback])
+
+* `chunk` &lt;string&gt;|&lt;Buffer&gt;|&lt;any|&gt; 可选参数。指定要写入的数据，如果在非Object模式，可以时string或Buffer，否则可以时除了null以外的任意类型
+* `encoding` &lt;string&gt; 可选参数。如果chunk时string，指定他的编码类型。
+* `callback` &lt;Function&gt; 可选参数。当流结束的时候调用的回调函数。
+
+调用`writable.end()`来声明以后再没有数据写入，参数`chunk`允许在关闭流之前立即写入最后一个数据，如果提供了，最后一个参数callback就会监听`finish`事件。
+
+在`stream.end()`之后再调用`stream.write()`会抛出错误。
+
+```js
+// write 'hello, ' and then end with 'world!'
+const file = fs.createWriteStream('example.txt');
+file.write('hello, ');
+file.end('world!');
+// writing more now is not allowed!
+```
+
+##### writable.setDefaultEncoding(encoding)
+* encoding &lt;String&gt; 设置默认编码类型
+* Returns: this
+
+##### writable.uncork()
+
+`writable.uncork()`会flush所有在`writable.cork()`调用之后缓存的数据，推荐把`writable.cork()`的调用放到`process.nextTick()`中。
+
+```js
+stream.cork();
+stream.write('some ');
+stream.write('data ');
+process.nextTick(() => stream.uncork());
+```
+
+如果`writable.cork()`被调用多次，那么同样`writable.uncork()`也应该被调用相同的次数。
+
+```js
+stream.cork();
+stream.write('some ');
+stream.cork();
+stream.write('data ');
+process.nextTick(() => {
+  stream.uncork();
+  // The data will not be flushed until uncork() is called a second time.
+  stream.uncork();
+});
+```
+
+##### writable.write(chunk[, encoding][, callback])
+* chunk <String> | <Buffer> 要写入的数据
+* encoding <String> 如果chunk是字符串，指定他的编码类型
+* callback <Function> 当chunk被flush的时候调用的回调函数
+* Returns: <Boolean> 如果流希望调用代码等待`drain`事件，收到后继续写入额外的数据的话就返回false，否则返回true
+
+译者注： 返回false并不意味着数据写入失败，只是代表buffer已经满了，下次再写入的时候要在收到drain事件之后。
+
+写入一些数据到stream后，一旦数据被处理完成，接下来会调用提供的`callback`，如果发生错误，可能也可能不会调用并且传递一个error参数，可靠的办法时监听`error`事件
+
+如果内部buffer的大小小于`highWaterMark`，返回true，如果大于，那么返回false，并且下次write需要在收到`drain`事件之后。
+
+当流还没有被用尽时（buffer已经被写满，但是还没有被底层系统完全把他消化完全），调用`write()`会返回false，一旦所有被缓存的chunks被用尽，会产生`drain`事件，推荐一旦`write()`返回false，就不要再调用`write()`只等到`drain`事件发生，但是继续调用也时允许的，Node.js会继续缓存数据，直到达到内存的最大内存限制，这时程序会异常退出。甚至在退出之前，高内存使用会引起内存回收机制性能低下。如果TCP socket可能永远不会被用尽，如果对端不消费数据，所以在没有用尽的时候就调用`write()`会产生潜在弱点。
+
+对于[Transform]()流,在没有用尽的情况下写入数据是一个典型的问题，因为默认情况下，没有为[Transform]()监听`data`或`redable`事件而且没有pipe，那么流处于暂停状态，也就是没有任何消费者。
+
+如果要写入流的数据可以按照需要去取，那么可以把生成数据这部分封装到[Readable]()流中，然后使用pipe，写入[Writable]()流。可是如果写更优先时，为了避免内存问题，就需要使用`drain`事件。
+
+```js
+function write (data, cb) {
+  if (!stream.write(data)) {
+    stream.once('drain', cb)
+  } else {
+    process.nextTick(cb)
+  }
+}
+
+// Wait for cb to be called before doing any other write.
+write('hello', () => {
+  console.log('write completed, do more writes now')
+})
+```
+
+在Object模式下，[Writable]()流会忽略`encoding`参数。
+
+### Readable Streams
+
 ## API for Stream Implementers
 
 ## Additional Notes
