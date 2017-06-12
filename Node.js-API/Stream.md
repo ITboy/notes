@@ -294,6 +294,85 @@ write('hello', () => {
 
 ### Readable Streams
 
+可读流是可以被消费的数据源的抽象。
+
+Readable流的例子如下：
+
+* HTTP responses, on the client
+* HTTP requests, on the server
+* fs read streams
+* zlib streams
+* crypto streams
+* TCP sockets
+* child process stdout and stderr
+* process.stdin
+
+所有只读流的都实现`stream.Readable`的接口类。
+
+#### 两个模式
+
+可读流可以在两个模式下工作：
+1. flowing
+2. paused
+
+在flowing模式下，底层子系统自动读取数据，并且以`EventEmitter`接口，尽量快的速度提供给应用程序
+
+在paused模式下，必须显式调用stream.read()来获取数据。
+
+所有可读流开始都处于paused模式，但是可以通过以下方式切换到flowing模式：
+1. 添加'data'事件监听器
+2. 调用`stream.resume()`方法
+3. 调用`stream.pipe()`把数据发送给一个[Writable]()流
+
+可读流也可以切换回paused模式，方法如下：
+1. 如果没有pipe的目的地，调用`stream.pause()`
+2. 如果有pipe的目的地，调用`stream.unpipe()`移除所有的pipe的目的地，并且移除`data`事件监听器
+
+综上，有一个重要的概念，如果没有提供一种方式消费或忽略数据，将不会有数据产生，同样如果当数据产生时，如果把消费或忽略的数据移除时，流也就不会产生数据（paused）。
+
+译者注：
+1. 只要pipe了目的地，就一定在flowing模式，哪怕调用了`pause()`
+2. 如果没有pipe目的地，但时绑定了`data`事件，默认时在flowing模式，但是可以使用`pause()`来进入paused状态。
+3. 如果没有pipe的目的地，也没有绑定`data`，那么就处于paused状态，但是可以使用`resume()`来进入flowing模式，会忽略掉生成的数据。
+
+注意：处于向后兼容的考虑，移除`data`事件不会自动暂停流，同样，如果有pipe，调用`paused()`也不会暂停流。
+
+注意：如果流处于flowing模式，而没有可用的消费者，数据会丢失。比如当没有添加`data`事件监听器却调用了`resume()`时，或者移除了`data`事件监听器时。
+
+#### 三种状态
+
+paused和flowing两种模式只是三种内部实现状态的一种简单抽象，更细节的要看这三种状态：
+* readable.\_readableState.flowing = null
+* readable.\_readableState.flowing = false
+* readable.\_readableState.flowing = true
+
+当`readable.\_readableState.flowing = null`，没有提供消费数据的机制，数据不会被生成。
+
+监听`data`事件，调用`stream.resume()`，调用`stream.pipe()`都会设置`readable.\_readableState.flowing = true`，引起流当数据生成时产生`data`事件。
+
+调用`stream.pause()`， `stream.unpipe()`会设置`readable.\_readableState.flowing = false`，会停止产生`data`事件，却不会停止生成数据。
+
+当`readable._readableState.flowing`值为`false`时，数据会被累计到内部buffer中。
+
+#### 选择一种方式
+
+可读流在Node.js的多个版本中提供多种方式消费数据，通常情况下，开发者应该选择其中一种方式，而不应该在一个流中使用多种方式消费数据。
+
+对于大多数用户推荐使用`readable.pipe()`，因为他是已经实现的最简单的方式使用数据，如果开发者想更细粒度控制，可以使用`EventEmitter`接口和`readable.pause()`， `readable.resume()` API。
+
+#### Class: stream.Readable
+
+##### Event: 'close'
+
+当底层资源被关闭的时候会产生一个`close`事件（比如文件描述符关闭的时候）。这意味着之后没有任何事件产生，也不会有任何的计算发生。
+
+并非所有的Readable流都会产生`close`事件。
+
+##### Event: 'data'
+
+* chunk <Buffer> | <String> | <any>
+  在非Object模式，chunk是`Buffer`或string，但是在Object模式下，chunk可以是除null以外的所有对象。
+##### Event: 'data'
 ## API for Stream Implementers
 
 ## Additional Notes
