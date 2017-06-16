@@ -21,7 +21,7 @@ const stream = require('stream');
 - Readable 可以从中读取数据的流 (比如`fs.createReadStream())`）
 - Writable 可以向里写数据的流 (比如`fs.createWriteStream(`）
 - Duplex 既可以从中读数据，又可以向里写数据的流 （比如 `net.Socket`）
-- Transform 是一种Duplex的流，当向他写数据并读出来时，转换数据 （比如 `zlib.createDeflate`)
+- Transform 是一种Duplex的流，当向他写数据并读出来时转换数据 （比如 `zlib.createDeflate`)
 
 ### Object Mode
 
