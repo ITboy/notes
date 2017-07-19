@@ -1,5 +1,72 @@
 # Knowledge points about HTML
 
+## 怎样组织一个HTML页面
+多数情况下HTML的页面长这样：
+![HTML layout](https://mdn.mozillademos.org/files/12417/sample-website.png)
+
+``` HTML
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>A Common Page Layout</title>
+		<link rel="stylesheet" type="text/css" href="style.css">
+	</head>
+	<body>
+		<header>Article heading</header>
+		<nav>
+	      <ul>
+	        <li><a href="#">Home</a></li>
+	        <li><a href="#">Our team</a></li>
+	        <li><a href="#">Projects</a></li>
+	        <li><a href="#">Contact</a></li>
+	      </ul>
+	
+	       <!-- A Search form is another commmon non-linear way to navigate through a website. -->
+	
+	       <form>
+	         <input type="search" name="q" placeholder="Search query">
+	         <input type="submit" value="Go!">
+	       </form>
+	    </nav>
+		<main>
+			The main content.
+			<aside>Related links</aside>
+		</main>
+		<footer>Page footer</footer>
+	<body>
+</html>
+```
+
+### 页面的主要组成部分说明：
+
+* `<main>`包含页面的主要内容，一个页面应该只有一个`<main>`元素，并且是`<body>`的直接子元素
+* `<header>`包含一些介绍性的内容，当作为页面的头的时候，介绍整个页面，也可以出现在`<section>`内部
+* `<aside>`包含的内容与主要内容无关，但是提供一些额外的内容，比如一些相关的连接，作者的信息等，可以放在`<main`中
+* `<footer>`包含一些结束性的内容，作为页面的结尾时，通常是地址信息，版权信息等
+* `<nav>` 页面的导航，可以作为`<header>`的一部分，但不是必须的
+* `<article>`包含一块独立的内容，即便没有页面的其他内容，他也有意义，可以被重用的单元
+* `<section>`与`<article>`类似，但是他还可以把组织一些有单独功能的部分组织在一起，并且他一般有`<header>`,可以有`<footer>`
+
+### 规划一个网站
+
+怎么为一个网站做规划呢？
+
+1. 思考一个页面的通用部分放些什么内容，比如footer的地址，版权，头部的logo和介绍信息，aside是否放一些超链接或作者信息
+2. 粗略规划页面的布局，分几列，1中规划的信息分别如何放置
+3. 头脑风暴整个网站有什么内容或功能
+4. 对3中的内容进行分类
+5. 对分类好的内容进行分配，要分几个页面，他们之间的跳转关系
+
+### 使一个页面更有意义
+
+#### 有意义的标签
+
+#### 没有意义的标签
+
+* div
+* span
+
 ## 图片
 
 ### 普通用法
