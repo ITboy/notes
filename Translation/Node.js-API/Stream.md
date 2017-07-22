@@ -372,6 +372,8 @@ paused和flowing两种模式只是三种内部实现状态的一种简单抽象�
 
 * chunk <Buffer> | <String> | <any>
   在非Object模式，chunk是`Buffer`或string，但是在Object模式下，chunk可以是除null以外的所有对象。
+
+
 ##### Event: 'data'
 ## API for Stream Implementers
 
